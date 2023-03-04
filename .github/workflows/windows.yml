@@ -134,6 +134,6 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         prerelease: true
-        artifacts: "artifacts_windows_x64.zip"
         tag_name: ${{ env.TAG_NAME }}
-        allowUpdates: true
+        files: | 
+          "artifacts_windows_x64.zip"
