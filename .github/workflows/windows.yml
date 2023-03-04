@@ -2,6 +2,8 @@ name: build_windows
 
 on:
   workflow_dispatch:
+  push:
+  pull_request:
 
 env:
   TAG_NAME: "0.1.0"
