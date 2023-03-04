@@ -3,28 +3,14 @@ name: build_windows
 on:
   workflow_dispatch:
 
+env:
+  TAG_NAME: "0.1.0"
+
 jobs:
 
   build:
     runs-on: windows-latest
     steps:
-    # clone x264
-    - name: Clone x264 Repository
-      run: |
-        git clone -b 0.164.r3101 --depth=1 https://github.com/ShiftMediaProject/x264.git ./source/x264
-    - name: Get Git Tag
-      working-directory: ./source/x264
-      run: |
-        echo "X264_GIT_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-    
-    # clone x265
-    - name: Clone x265 Repository
-      run: |
-        git clone -b 3.5 https://github.com/ShiftMediaProject/x265.git ./source/x265
-    - name: Get Git Tag
-      working-directory: ./source/x265
-      run: |
-        echo "X265_GIT_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
     
     # clone amf
     - name: Clone amf Repository
@@ -34,15 +20,6 @@ jobs:
       working-directory: ./source/amf
       run: |
         echo "AMF_GIT_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-        
-    # clone mfx_dispatch
-    - name: Clone mfx Repository
-      run: |
-        git clone -b 1.35.r89 https://github.com/ShiftMediaProject/mfx_dispatch.git ./source/mfx_dispatch
-    - name: Get Git Tag
-      working-directory: ./source/mfx_dispatch
-      run: |
-        echo "MFX_GIT_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
     
     # clone nv-codec-headers
     - name: Clone nvcodec Repository
@@ -101,33 +78,6 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.1
 
-    # compile x264
-    - name: Upgrade x264 project
-      run: |
-        $devenv = & vswhere.exe '-property' productPath
-        Start-Process -Wait -FilePath $devenv -PassThru -NoNewWindow -ArgumentList "${{github.workspace}}\source\x264\SMP\libx264.vcxproj", "-upgrade"
-    - name: Build x264
-      run: |
-        $proc = Start-Process -FilePath "MSBuild.exe" -PassThru -NoNewWindow -ArgumentList "-t:ReBuild", "-nodeReuse:false", "-p:Configuration=Release", "-p:Platform=x64", "-p:PlatformToolset=v143", "${{github.workspace}}\source\x264\SMP\libx264.vcxproj"
-        Wait-Process -InputObject $proc
-    # compile x265
-    - name: Upgrade x265 project
-      run: |
-        $devenv = & vswhere.exe '-property' productPath
-        Start-Process -Wait -FilePath $devenv -PassThru -NoNewWindow -ArgumentList "${{github.workspace}}\source\x265\SMP\libx265.vcxproj", "-upgrade"
-    - name: Build x265
-      run: |
-        $proc = Start-Process -FilePath "MSBuild.exe" -PassThru -NoNewWindow -ArgumentList "-t:ReBuild", "-nodeReuse:false", "-p:Configuration=Release", "-p:Platform=x64", "-p:PlatformToolset=v143", "${{github.workspace}}\source\x265\SMP\libx265.vcxproj"
-        Wait-Process -InputObject $proc
-    # compile mfx
-    - name: Upgrade mfx project
-      run: |
-        $devenv = & vswhere.exe '-property' productPath
-        Start-Process -Wait -FilePath $devenv -PassThru -NoNewWindow -ArgumentList "${{github.workspace}}\source\mfx_dispatch\SMP\libmfx.vcxproj", "-upgrade"
-    - name: Build mfx
-      run: |
-        $proc = Start-Process -FilePath "MSBuild.exe" -PassThru -NoNewWindow -ArgumentList "-t:ReBuild", "-nodeReuse:false", "-p:Configuration=Release", "-p:Platform=x64", "-p:PlatformToolset=v143", "${{github.workspace}}\source\mfx_dispatch\SMP\libmfx.vcxproj"
-        Wait-Process -InputObject $proc
     - name: Generate FFmpeg VS Project
       working-directory: ./source
       run: |
@@ -139,7 +89,6 @@ jobs:
         "--enable-d3d11va", `
         "--enable-cuvid", `
         "--enable-amf", `
-        "--enable-libmfx", `
         "--enable-ffnvcodec", `
         "--enable-w32threads", `
         "--enable-gpl", `
@@ -150,10 +99,6 @@ jobs:
         "--enable-avformat", `
         "--enable-swresample", `
         "--enable-avfilter", `
-        "--enable-libx264", `
-        "--enable-libx265", `
-        "--enable-encoder=libx264", `
-        "--enable-encoder=libx265", `
         "--enable-decoder=h264", `
         "--enable-decoder=hevc", `
         "--disable-doc", `
@@ -186,8 +131,9 @@ jobs:
       run: |
         7z a artifacts_windows_x64.zip ${{github.workspace}}\msvc\*
     - name: Release
-      uses: ncipollo/release-action@v1
+      uses: softprops/action-gh-release@v1
       with:
+        prerelease: true
         artifacts: "artifacts_windows_x64.zip"
-        tag: "latest"
+        tag_name: ${{ env.TAG_NAME }}
         allowUpdates: true
