@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  TAG_NAME: "0.1.0"
+  TAG_NAME: "dev"
 
 jobs:
 
@@ -132,10 +132,14 @@ jobs:
     - name: Zip Assets
       run: |
         7z a artifacts_windows_x64.zip ${{github.workspace}}\msvc\*
+    - name: Show
+      run: |
+        cmd /C dir
+        cmd /C dir msvc
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
         prerelease: true
         tag_name: ${{ env.TAG_NAME }}
         files: | 
-          "artifacts_windows_x64.zip"
+          ./artifacts_windows_x64.zip
