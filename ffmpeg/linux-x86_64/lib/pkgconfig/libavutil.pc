@@ -9,6 +9,6 @@ Version: 57.28.100
 Requires: 
 Requires.private: 
 Conflicts:
-Libs: -L${libdir}  -lavutil -pthread -lm -latomic -lX11 -ldl
+Libs: -L${libdir}  -lavutil -pthread -lva-drm -lva -lva-x11 -lva -lm -lmfx -lstdc++ -ldl -lva -latomic -lX11 -ldl
 Libs.private: 
 Cflags: -I${includedir}

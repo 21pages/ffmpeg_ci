@@ -9,6 +9,6 @@ Version: 57.28.100
 Requires: 
 Requires.private: 
 Conflicts:
-Libs: -L${libdir}  -lavutil user32.lib bcrypt.lib
+Libs: -L${libdir}  -lavutil -libpath:/usr/local/lib/mfx/lib mfx.lib ole32.lib Advapi32.lib user32.lib bcrypt.lib
 Libs.private: 
 Cflags: -I${includedir}
