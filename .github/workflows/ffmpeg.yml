@@ -228,7 +228,7 @@ jobs:
           git clone --depth=1 -b ${{ env.FFMPEG_VERSION_WIN_LINUX }} https://github.com/FFmpeg/FFmpeg.git
           mkdir includes
           mkdir libs
-          mkdir release
+          mkdir -p release/lib/pkgconfig
           ls -al
 
       - name: Patch
@@ -263,6 +263,8 @@ jobs:
           ./configure
           make -j32 && make install
           cd -
+          cp /usr/local/lib/libmfx.a release/lib/
+          cp /usr/local/lib/pkgconfig/libmfx.pc release/lib/pkgconfig/
 
       - name: Configure
         working-directory: ${{github.workspace}}/FFmpeg
@@ -282,9 +284,6 @@ jobs:
         run: |
           make -j32 && make install
           rm -r ../release/share
-          if [ ${{ matrix.job.arch }} == "x86_64" ]; then
-            cp /usr/local/lib/mfx/lib/mfx.a ../release/lib/
-          fi
       
       - name: Create Archive
         uses: thedoctor0/zip-release@0.7.1
