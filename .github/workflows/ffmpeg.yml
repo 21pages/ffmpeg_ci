@@ -190,7 +190,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04, arch: x86_64, codec: "--enable-cuda --enable-cuda_llvm --enable-ffnvcodec --enable-encoder=h264_nvenc --enable-encoder=hevc_nvenc --enable-hwaccel=h264_nvdec --enable-hwaccel=hevc_nvdec --enable-amf  --enable-encoder=h264_amf --enable-encoder=hevc_amf --enable-hwaccel=h264_vaapi --enable-hwaccel=hevc_vaapi --enable-encoder=h264_vaapi --enable-encoder=hevc_vaapi", extra: ""}
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04, arch: x86_64, codec: "--enable-cuda --enable-cuda_llvm --enable-ffnvcodec --enable-encoder=h264_nvenc --enable-encoder=hevc_nvenc --enable-hwaccel=h264_nvdec --enable-hwaccel=hevc_nvdec --enable-amf  --enable-encoder=h264_amf --enable-encoder=hevc_amf --enable-hwaccel=h264_vaapi --enable-hwaccel=hevc_vaapi --enable-encoder=h264_vaapi --enable-encoder=hevc_vaapi  --enable-libmfx --enable-encoder=h264_qsv --enable-encoder=hevc_qsv", extra: ""}
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-20.04, arch: aarch64, codec: "", extra: "--enable-cross-compile --arch=arm64 cross-prefix=aarch64-linux-gnu-" }
           - { target: armv7-unknown-linux-gnueabihf, os: ubuntu-latest, arch: armv7, codec: "", extra: "--enable-cross-compile --arch=armhf cross-prefix=arm-linux-gnueabihf-"}
       
@@ -201,7 +201,7 @@ jobs:
       - name: tools
         run: |
           apt-get -y update
-          apt-get -y install build-essential yasm pkg-config libva-dev git zip
+          apt-get -y install build-essential yasm pkg-config libva-dev git zip autoconf libtool
       
       - name: cross tool aarch64
         if: ${{ matrix.job.arch == 'aarch64' }}
@@ -252,6 +252,16 @@ jobs:
           cd nv-codec-headers && make install
           cd -
       
+      - name: mfx dispatcher
+        if: ${{ matrix.job.arch == 'x86_64' }}
+        run: |
+          git clone --depth=1 -b 1.35.1 https://github.com/lu-zero/mfx_dispatch.git
+          cd mfx_dispatch
+          autoreconf -i
+          ./configure
+          make -j32 && make install
+          cd -
+
       - name: Configure
         working-directory: ${{github.workspace}}/FFmpeg
         run: |
@@ -270,6 +280,9 @@ jobs:
         run: |
           make -j32 && make install
           rm -r ../release/share
+          if [ ${{ matrix.job.arch }} == "x86_64" ]; then
+            cp /usr/local/lib/mfx/lib/mfx.a ../release/lib/
+          fi
       
       - name: Create Archive
         uses: thedoctor0/zip-release@0.7.1
