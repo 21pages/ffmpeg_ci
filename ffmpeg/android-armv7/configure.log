@@ -25,7 +25,7 @@ makeinfo supports HTML    yes
 xmllint enabled           no
 
 External libraries:
-zlib
+jni                     mediacodec              zlib
 
 External libraries providing hardware acceleration:
 cuda_llvm
@@ -36,9 +36,13 @@ avcodec                 avformat                avutil
 Programs:
 
 Enabled decoders:
-h264                    hevc
+av1_mediacodec          hevc                    vp9_mediacodec
+h264                    hevc_mediacodec
+h264_mediacodec         vp8_mediacodec
 
 Enabled encoders:
+av1_mediacodec          hevc_mediacodec         vp9_mediacodec
+h264_mediacodec         vp8_mediacodec
 
 Enabled hwaccels:
 
@@ -56,8 +60,9 @@ file
 Enabled filters:
 
 Enabled bsfs:
-aac_adtstoasc           hevc_mp4toannexb
-h264_mp4toannexb        vp9_superframe
+aac_adtstoasc           h264_mp4toannexb        vp9_metadata
+av1_metadata            hevc_metadata           vp9_superframe
+h264_metadata           hevc_mp4toannexb
 
 Enabled indevs:
 
