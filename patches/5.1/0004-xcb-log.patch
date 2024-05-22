@@ -1,0 +1,72 @@
+From 19a3333a75992ba2f11de6678dcd21da310fae0f Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Tue, 2 Jul 2024 20:32:28 +0800
+Subject: [PATCH] xcb log
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavdevice/xcbgrab.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/libavdevice/xcbgrab.c b/libavdevice/xcbgrab.c
+index 64a68ba497..7ee7a620b7 100644
+--- a/libavdevice/xcbgrab.c
++++ b/libavdevice/xcbgrab.c
+@@ -594,6 +594,8 @@ static int create_stream(AVFormatContext *s)
+         return AVERROR_EXTERNAL;
+     }
+ 
++    av_log(s, AV_LOG_INFO, "create_stream c->x: %d, c->y: %d, c->width: %d, c->height: %d, geo->width: %d, geo->height: %d, geo->depth: %d, \n",c->x, c->y, c->width, c->height, geo->width, geo->height, geo->depth);
++
+     if (!c->width || !c->height) {
+         c->width = geo->width;
+         c->height = geo->height;
+@@ -617,11 +619,13 @@ static int create_stream(AVFormatContext *s)
+     c->time_frame = av_gettime_relative();
+ 
+     ret = pixfmt_from_pixmap_format(s, geo->depth, &st->codecpar->format, &c->bpp);
++    av_log(s, AV_LOG_INFO, "pixfmt_from_pixmap_format ret: %d, st->codecpar->format: %d, c->bpp: %d\n", ret, st->codecpar->format, c->bpp);
+     free(geo);
+     if (ret < 0)
+         return ret;
+ 
+     frame_size_bits = (int64_t)c->width * c->height * c->bpp;
++    av_log(s, AV_LOG_INFO, "frame_size_bits: %ld\n", frame_size_bits);
+     if (frame_size_bits / 8 + AV_INPUT_BUFFER_PADDING_SIZE > INT_MAX) {
+         av_log(s, AV_LOG_ERROR, "Captured area is too large\n");
+         return AVERROR_PATCHWELCOME;
+@@ -830,6 +834,7 @@ static av_cold int xcbgrab_read_header(AVFormatContext *s)
+     }
+ 
+     c->conn = xcb_connect(display_name[0] ? display_name : NULL, &screen_num);
++    av_log(s, AV_LOG_INFO, "display_name[0]: %d\n", display_name[0]);
+     av_freep(&display_name);
+ 
+     if ((ret = xcb_connection_has_error(c->conn))) {
+@@ -848,6 +853,7 @@ static av_cold int xcbgrab_read_header(AVFormatContext *s)
+         return AVERROR(EIO);
+     }
+ 
++    av_log(s, AV_LOG_INFO, "c->window_id == XCB_NONE: %d\n", c->window_id == XCB_NONE);
+     if (c->window_id == XCB_NONE)
+         c->window_id = c->screen->root;
+     else {
+@@ -861,6 +867,7 @@ static av_cold int xcbgrab_read_header(AVFormatContext *s)
+         }
+     }
+ 
++    av_log(s, AV_LOG_INFO, "c->select_region: %d\n", c->select_region);
+     if (c->select_region) {
+         ret = select_region(s);
+         if (ret < 0) {
+@@ -878,6 +885,7 @@ static av_cold int xcbgrab_read_header(AVFormatContext *s)
+ 
+ #if CONFIG_LIBXCB_SHM
+     c->has_shm = check_shm(c->conn);
++    av_log(s, AV_LOG_INFO, "c->has_shm: %d\n", c->has_shm);
+ #endif
+ 
+ #if CONFIG_LIBXCB_XFIXES
+-- 
+2.34.1
+
