@@ -1,0 +1,348 @@
+From faabd74732e79937dc4be2f04ecf6d717cda37c5 Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Wed, 3 Jul 2024 16:52:10 +0800
+Subject: [PATCH] vt
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ 0001-vt.patch                | 170 +++++++++++++++++++++++++++++++++++
+ libavcodec/videotoolboxenc.c |  47 ++++++++--
+ 2 files changed, 208 insertions(+), 9 deletions(-)
+ create mode 100644 0001-vt.patch
+
+diff --git a/0001-vt.patch b/0001-vt.patch
+new file mode 100644
+index 0000000000..a2d29b2514
+--- /dev/null
++++ b/0001-vt.patch
+@@ -0,0 +1,170 @@
++From 5c9fe47653b7294247c41e259fc003cda6b1d55c Mon Sep 17 00:00:00 2001
++From: 21pages <sunboeasy@gmail.com>
++Date: Wed, 3 Jul 2024 16:52:10 +0800
++Subject: [PATCH] vt
++
++Signed-off-by: 21pages <sunboeasy@gmail.com>
++---
++ libavcodec/videotoolboxenc.c | 47 +++++++++++++++++++++++++++++-------
++ 1 file changed, 38 insertions(+), 9 deletions(-)
++
++diff --git a/libavcodec/videotoolboxenc.c b/libavcodec/videotoolboxenc.c
++index 15c34d59c3..ff408367a8 100644
++--- a/libavcodec/videotoolboxenc.c
+++++ b/libavcodec/videotoolboxenc.c
++@@ -120,6 +120,8 @@ static struct{
++     CFStringRef kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality;
++     CFStringRef kVTCompressionPropertyKey_ConstantBitRate;
++     CFStringRef kVTCompressionPropertyKey_EncoderID;
+++    CFStringRef kVTCompressionPropertyKey_AllowTemporalCompression;
+++    CFStringRef kVTCompressionPropertyKey_AllowFrameReordering;
++ 
++     CFStringRef kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder;
++     CFStringRef kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder;
++@@ -193,6 +195,10 @@ static void loadVTEncSymbols(void){
++             "PrioritizeEncodingSpeedOverQuality");
++     GET_SYM(kVTCompressionPropertyKey_ConstantBitRate, "ConstantBitRate");
++     GET_SYM(kVTCompressionPropertyKey_EncoderID, "EncoderID");
+++    GET_SYM(kVTCompressionPropertyKey_AllowTemporalCompression,
+++            "AllowTemporalCompression");
+++    GET_SYM(kVTCompressionPropertyKey_AllowFrameReordering,
+++            "AllowFrameReordering");
++ 
++     GET_SYM(kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
++             "EnableHardwareAcceleratedVideoEncoder");
++@@ -737,6 +743,7 @@ static void vtenc_output_callback(
++     VTEncContext   *vtctx = avctx->priv_data;
++     ExtraSEI *sei = sourceFrameCtx;
++ 
+++    av_log(avctx, AV_LOG_INFO,  "vtenc_output_callback 1 vtctx->async_error:%d, status:%d, !sample_buffer:%d\n", vtctx->async_error, status, !sample_buffer);
++     if (vtctx->async_error) {
++         return;
++     }
++@@ -753,12 +760,14 @@ static void vtenc_output_callback(
++ 
++     if (!avctx->extradata && (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER)) {
++         int set_status = set_extradata(avctx, sample_buffer);
+++            av_log(avctx, AV_LOG_INFO,  "vtenc_output_callback 2 set_status:%d\n", set_status);
++         if (set_status) {
++             set_async_error(vtctx, set_status);
++             return;
++         }
++     }
++ 
+++                av_log(avctx, AV_LOG_INFO,  "vtenc_output_callback 3\n");
++     vtenc_q_push(vtctx, sample_buffer, sei);
++ }
++ 
++@@ -1367,6 +1376,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
++     }
++ 
++     if (vtctx->frames_before) {
+++        av_log(avctx, AV_LOG_INFO,  "----------=== frames_before\n");
++         status = VTSessionSetProperty(vtctx->session,
++                                       kVTCompressionPropertyKey_MoreFramesBeforeStart,
++                                       kCFBooleanTrue);
++@@ -1379,6 +1389,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
++     }
++ 
++     if (vtctx->frames_after) {
+++        av_log(avctx, AV_LOG_INFO,  "----------=== frames_after\n");
++         status = VTSessionSetProperty(vtctx->session,
++                                       kVTCompressionPropertyKey_MoreFramesAfterEnd,
++                                       kCFBooleanTrue);
++@@ -1496,16 +1507,18 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
++         }
++     }
++ 
++-    if (!vtctx->has_b_frames && avctx->codec_id != AV_CODEC_ID_PRORES) {
++-        status = VTSessionSetProperty(vtctx->session,
++-                                      kVTCompressionPropertyKey_AllowFrameReordering,
++-                                      kCFBooleanFalse);
+++    av_log(avctx, AV_LOG_INFO,  "----------=== has_b_frames:%d, codec_id %d\n", vtctx->has_b_frames, avctx->codec_id);
+++    // if (!vtctx->has_b_frames && avctx->codec_id != AV_CODEC_ID_PRORES) {
+++    //     av_log(avctx, AV_LOG_INFO,  "----------=== kVTCompressionPropertyKey_AllowFrameReordering set false\n");
+++    //     status = VTSessionSetProperty(vtctx->session,
+++    //                                   kVTCompressionPropertyKey_AllowFrameReordering,
+++    //                                   kCFBooleanFalse);
++ 
++-        if (status) {
++-            av_log(avctx, AV_LOG_ERROR, "Error setting 'allow frame reordering' property: %d\n", status);
++-            return AVERROR_EXTERNAL;
++-        }
++-    }
+++    //     if (status) {
+++    //         av_log(avctx, AV_LOG_ERROR, "Error setting 'allow frame reordering' property: %d\n", status);
+++    //         return AVERROR_EXTERNAL;
+++    //     }
+++    // }
++ 
++     if (vtctx->entropy != VT_ENTROPY_NOT_SET) {
++         CFStringRef entropy = vtctx->entropy == VT_CABAC ?
++@@ -1521,6 +1534,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
++         }
++     }
++ 
+++    av_log(avctx, AV_LOG_INFO,  "----------=== vtctx->realtime:%d\n", vtctx->realtime);
++     if (vtctx->realtime >= 0) {
++         status = VTSessionSetProperty(vtctx->session,
++                                       compat_keys.kVTCompressionPropertyKey_RealTime,
++@@ -1588,6 +1602,13 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
++             return status;
++         }
++     }
+++    //
+++    status = VTSessionSetProperty(vtctx->session,
+++                                      compat_keys.kVTCompressionPropertyKey_RealTime,
+++                                      kCFBooleanFalse);
+++    VTSessionSetProperty(vtctx->session, compat_keys.kVTCompressionPropertyKey_AllowTemporalCompression, kCFBooleanTrue);
+++    VTSessionSetProperty(vtctx->session, compat_keys.kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanTrue);
+++                                      //
++ 
++     status = VTCompressionSessionPrepareToEncodeFrames(vtctx->session);
++     if (status) {
++@@ -2629,9 +2650,11 @@ static av_cold int vtenc_frame(
++     int status;
++     CMSampleBufferRef buf = NULL;
++     ExtraSEI *sei = NULL;
+++    av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 1\n", status);
++ 
++     if (frame) {
++         status = vtenc_send_frame(avctx, vtctx, frame);
+++        av_log(avctx, AV_LOG_INFO,  "---------- vtenc_send_frame status:%d\n", status);
++ 
++         if (status) {
++             status = AVERROR_EXTERNAL;
++@@ -2657,6 +2680,7 @@ static av_cold int vtenc_frame(
++             goto end_nopkt;
++         }
++     }
+++        av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 2\n");
++ 
++     *got_packet = 0;
++     get_frame = vtctx->dts_delta >= 0 || !frame;
++@@ -2664,11 +2688,14 @@ static av_cold int vtenc_frame(
++         status = 0;
++         goto end_nopkt;
++     }
+++            av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 3\n");
++ 
++     status = vtenc_q_pop(vtctx, !frame, &buf, &sei);
++     if (status) goto end_nopkt;
++     if (!buf)   goto end_nopkt;
++ 
+++                av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 4\n");
+++
++     status = vtenc_cm_to_avpacket(avctx, buf, pkt, sei);
++     if (sei) {
++         if (sei->data) av_free(sei->data);
++@@ -2677,6 +2704,8 @@ static av_cold int vtenc_frame(
++     CFRelease(buf);
++     if (status) goto end_nopkt;
++ 
+++                av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 5\n");
+++
++     *got_packet = 1;
++     return 0;
++ 
++-- 
++2.39.3 (Apple Git-145)
++
+diff --git a/libavcodec/videotoolboxenc.c b/libavcodec/videotoolboxenc.c
+index 15c34d59c3..ff408367a8 100644
+--- a/libavcodec/videotoolboxenc.c
++++ b/libavcodec/videotoolboxenc.c
+@@ -120,6 +120,8 @@ static struct{
+     CFStringRef kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality;
+     CFStringRef kVTCompressionPropertyKey_ConstantBitRate;
+     CFStringRef kVTCompressionPropertyKey_EncoderID;
++    CFStringRef kVTCompressionPropertyKey_AllowTemporalCompression;
++    CFStringRef kVTCompressionPropertyKey_AllowFrameReordering;
+ 
+     CFStringRef kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder;
+     CFStringRef kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder;
+@@ -193,6 +195,10 @@ static void loadVTEncSymbols(void){
+             "PrioritizeEncodingSpeedOverQuality");
+     GET_SYM(kVTCompressionPropertyKey_ConstantBitRate, "ConstantBitRate");
+     GET_SYM(kVTCompressionPropertyKey_EncoderID, "EncoderID");
++    GET_SYM(kVTCompressionPropertyKey_AllowTemporalCompression,
++            "AllowTemporalCompression");
++    GET_SYM(kVTCompressionPropertyKey_AllowFrameReordering,
++            "AllowFrameReordering");
+ 
+     GET_SYM(kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+             "EnableHardwareAcceleratedVideoEncoder");
+@@ -737,6 +743,7 @@ static void vtenc_output_callback(
+     VTEncContext   *vtctx = avctx->priv_data;
+     ExtraSEI *sei = sourceFrameCtx;
+ 
++    av_log(avctx, AV_LOG_INFO,  "vtenc_output_callback 1 vtctx->async_error:%d, status:%d, !sample_buffer:%d\n", vtctx->async_error, status, !sample_buffer);
+     if (vtctx->async_error) {
+         return;
+     }
+@@ -753,12 +760,14 @@ static void vtenc_output_callback(
+ 
+     if (!avctx->extradata && (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER)) {
+         int set_status = set_extradata(avctx, sample_buffer);
++            av_log(avctx, AV_LOG_INFO,  "vtenc_output_callback 2 set_status:%d\n", set_status);
+         if (set_status) {
+             set_async_error(vtctx, set_status);
+             return;
+         }
+     }
+ 
++                av_log(avctx, AV_LOG_INFO,  "vtenc_output_callback 3\n");
+     vtenc_q_push(vtctx, sample_buffer, sei);
+ }
+ 
+@@ -1367,6 +1376,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+     }
+ 
+     if (vtctx->frames_before) {
++        av_log(avctx, AV_LOG_INFO,  "----------=== frames_before\n");
+         status = VTSessionSetProperty(vtctx->session,
+                                       kVTCompressionPropertyKey_MoreFramesBeforeStart,
+                                       kCFBooleanTrue);
+@@ -1379,6 +1389,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+     }
+ 
+     if (vtctx->frames_after) {
++        av_log(avctx, AV_LOG_INFO,  "----------=== frames_after\n");
+         status = VTSessionSetProperty(vtctx->session,
+                                       kVTCompressionPropertyKey_MoreFramesAfterEnd,
+                                       kCFBooleanTrue);
+@@ -1496,16 +1507,18 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+         }
+     }
+ 
+-    if (!vtctx->has_b_frames && avctx->codec_id != AV_CODEC_ID_PRORES) {
+-        status = VTSessionSetProperty(vtctx->session,
+-                                      kVTCompressionPropertyKey_AllowFrameReordering,
+-                                      kCFBooleanFalse);
++    av_log(avctx, AV_LOG_INFO,  "----------=== has_b_frames:%d, codec_id %d\n", vtctx->has_b_frames, avctx->codec_id);
++    // if (!vtctx->has_b_frames && avctx->codec_id != AV_CODEC_ID_PRORES) {
++    //     av_log(avctx, AV_LOG_INFO,  "----------=== kVTCompressionPropertyKey_AllowFrameReordering set false\n");
++    //     status = VTSessionSetProperty(vtctx->session,
++    //                                   kVTCompressionPropertyKey_AllowFrameReordering,
++    //                                   kCFBooleanFalse);
+ 
+-        if (status) {
+-            av_log(avctx, AV_LOG_ERROR, "Error setting 'allow frame reordering' property: %d\n", status);
+-            return AVERROR_EXTERNAL;
+-        }
+-    }
++    //     if (status) {
++    //         av_log(avctx, AV_LOG_ERROR, "Error setting 'allow frame reordering' property: %d\n", status);
++    //         return AVERROR_EXTERNAL;
++    //     }
++    // }
+ 
+     if (vtctx->entropy != VT_ENTROPY_NOT_SET) {
+         CFStringRef entropy = vtctx->entropy == VT_CABAC ?
+@@ -1521,6 +1534,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+         }
+     }
+ 
++    av_log(avctx, AV_LOG_INFO,  "----------=== vtctx->realtime:%d\n", vtctx->realtime);
+     if (vtctx->realtime >= 0) {
+         status = VTSessionSetProperty(vtctx->session,
+                                       compat_keys.kVTCompressionPropertyKey_RealTime,
+@@ -1588,6 +1602,13 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+             return status;
+         }
+     }
++    //
++    status = VTSessionSetProperty(vtctx->session,
++                                      compat_keys.kVTCompressionPropertyKey_RealTime,
++                                      kCFBooleanFalse);
++    VTSessionSetProperty(vtctx->session, compat_keys.kVTCompressionPropertyKey_AllowTemporalCompression, kCFBooleanTrue);
++    VTSessionSetProperty(vtctx->session, compat_keys.kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanTrue);
++                                      //
+ 
+     status = VTCompressionSessionPrepareToEncodeFrames(vtctx->session);
+     if (status) {
+@@ -2629,9 +2650,11 @@ static av_cold int vtenc_frame(
+     int status;
+     CMSampleBufferRef buf = NULL;
+     ExtraSEI *sei = NULL;
++    av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 1\n", status);
+ 
+     if (frame) {
+         status = vtenc_send_frame(avctx, vtctx, frame);
++        av_log(avctx, AV_LOG_INFO,  "---------- vtenc_send_frame status:%d\n", status);
+ 
+         if (status) {
+             status = AVERROR_EXTERNAL;
+@@ -2657,6 +2680,7 @@ static av_cold int vtenc_frame(
+             goto end_nopkt;
+         }
+     }
++        av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 2\n");
+ 
+     *got_packet = 0;
+     get_frame = vtctx->dts_delta >= 0 || !frame;
+@@ -2664,11 +2688,14 @@ static av_cold int vtenc_frame(
+         status = 0;
+         goto end_nopkt;
+     }
++            av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 3\n");
+ 
+     status = vtenc_q_pop(vtctx, !frame, &buf, &sei);
+     if (status) goto end_nopkt;
+     if (!buf)   goto end_nopkt;
+ 
++                av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 4\n");
++
+     status = vtenc_cm_to_avpacket(avctx, buf, pkt, sei);
+     if (sei) {
+         if (sei->data) av_free(sei->data);
+@@ -2677,6 +2704,8 @@ static av_cold int vtenc_frame(
+     CFRelease(buf);
+     if (status) goto end_nopkt;
+ 
++                av_log(avctx, AV_LOG_INFO,  "---------- vtenc_frame 5\n");
++
+     *got_packet = 1;
+     return 0;
+ 
+-- 
+2.39.3 (Apple Git-145)
+

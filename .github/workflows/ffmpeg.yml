@@ -319,6 +319,12 @@ jobs:
           mkdir release
           mkdir libs
           ls -al
+
+      - name: Patch
+        run: |
+          cd FFmpeg
+          # git apply -v --ignore-whitespace ../patches/7.0/0001-vt.patch
+          cd -
       
       - name: Configure
         working-directory: ${{github.workspace}}/FFmpeg
