@@ -45,6 +45,7 @@ xmllint enabled           yes
 External libraries:
 
 External libraries providing hardware acceleration:
+videotoolbox
 
 Libraries:
 avcodec                 avformat                avutil
@@ -55,8 +56,10 @@ Enabled decoders:
 h264                    hevc
 
 Enabled encoders:
+h264_videotoolbox       hevc_videotoolbox
 
 Enabled hwaccels:
+h264_videotoolbox       hevc_videotoolbox
 
 Enabled parsers:
 ac3                     h264                    hevc
@@ -72,8 +75,8 @@ file
 Enabled filters:
 
 Enabled bsfs:
-aac_adtstoasc           hevc_mp4toannexb
-h264_mp4toannexb        vp9_superframe
+aac_adtstoasc           h264_mp4toannexb        hevc_mp4toannexb
+h264_metadata           hevc_metadata           vp9_superframe
 
 Enabled indevs:
 
