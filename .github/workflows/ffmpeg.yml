@@ -7,11 +7,7 @@ on:
 
 env:
   TAG_NAME: "dev"
-  NDK_VERSION: "r26b"
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true # https://github.com/actions/checkout/issues/1590#issuecomment-2208181786
-  FFMPEG_VERSION_WIN_LINUX: "release/5.1" # higher version ffmpeg requires higher version of nvidia driver
-  FFMPEG_VERSION: "release/7.0"
-  COMMON_CONF: "--disable-shared --enable-static --enable-pic --disable-everything  --disable-programs  --disable-doc  --disable-htmlpages  --disable-manpages  --disable-podpages  --disable-txtpages  --disable-network  --disable-appkit  --disable-coreimage   --disable-metal  --disable-sdl2  --disable-securetransport  --disable-vulkan  --disable-audiotoolbox  --disable-v4l2-m2m  --disable-debug  --disable-valgrind-backtrace  --disable-large-tests  --disable-avdevice  --enable-avcodec  --enable-avformat  --disable-avfilter --disable-swresample  --disable-swscale  --disable-postproc  --enable-decoder=h264  --enable-decoder=hevc  --enable-parser=h264  --enable-parser=hevc  --enable-bsf=h264_mp4toannexb  --enable-bsf=hevc_mp4toannexb --enable-bsf=h264_metadata  --enable-bsf=hevc_metadata --enable-muxer=mp4  --enable-protocol=file"
 
 permissions:
   contents: write
@@ -21,7 +17,6 @@ jobs:
     if: true
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
-    container:
     strategy:
       fail-fast: false
       matrix:
@@ -33,22 +28,22 @@ jobs:
   
       - name: tools
         run: |
-          apt-get -y update
-          apt-get -y install build-essential yasm pkg-config git zip
+          sudo apt-get -y update
+          sudo apt-get -y install build-essential yasm pkg-config git zip
       
       - name: wasm sdk
         run: |
           wget https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz
           tar -xvf wasi-sdk-24.0-x86_64-linux.tar.gz
           rm wasi-sdk-24.0-x86_64-linux.tar.gz
-          mv wasi-sdk-24.0 /opt/wasi-sdk
+          sudo mv wasi-sdk-24.0-x86_64-linux /opt/wasi-sdk
   
       - name: binaryen
         run: |
           wget https://github.com/WebAssembly/binaryen/releases/download/version_118/binaryen-version_118-x86_64-linux.tar.gz
           tar -xvf binaryen-version_118-x86_64-linux.tar.gz
           rm binaryen-version_118-x86_64-linux.tar.gz
-          mv binaryen-version_118 /opt/binaryen
+          sudo mv binaryen-version_118 /opt/binaryen
       
       - name: Source FFmpeg
         run: |
@@ -62,16 +57,86 @@ jobs:
         working-directory: ${{github.workspace}}/FFmpeg
         run: |
           set -euox pipefail
+
+          FFMPEG_CONFIG_FLAGS_BASE=(
+            --target-os=none        # use none to prevent any os specific configurations
+            --arch=x86_32           # use x86_32 to achieve minimal architectural optimization
+            --enable-cross-compile  # enable cross compile
+            --disable-inline-asm
+            --disable-x86asm        # disable x86 asm
+            --disable-inline-asm    # disable inline asm
+            --disable-stripping     # disable stripping
+            --disable-doc           # disable doc
+            --disable-debug         # disable debug info, required by closure
+            --disable-runtime-cpudetect   # disable runtime cpu detect
+            --disable-autodetect    # disable external libraries auto detect
+            --disable-network       # https://github.com/WebAssembly/wasi-sdk/issues/112
+            --disable-pthreads
+            --disable-w32threads
+            --disable-os2threads
+            --pkg-config-flags="--static"
+            --enable-lto            # use link-time optimization
+
+            --disable-everything
+            --disable-programs
+            --disable-htmlpages
+            --disable-manpages
+            --disable-podpages
+            --disable-txtpages
+            --disable-network
+            --disable-appkit
+            --disable-coreimage
+            --disable-metal
+            --disable-sdl2
+            --disable-securetransport
+            --disable-vulkan
+            --disable-audiotoolbox
+            --disable-v4l2-m2m
+            --disable-valgrind-backtrace
+            --disable-large-tests
+            
+            --disable-avdevice
+            --disable-avformat
+            --disable-avfilter
+            --disable-swresample
+            --disable-swscale
+            --disable-postproc
+            --enable-avcodec
+            --enable-decoder=h264
+            --enable-decoder=hevc
+            --enable-decoder=vp8
+            --enable-decoder=vp9
+            --enable-decoder=av1
+
+            --nm=opt/wasi-sdk/bin/nm
+            --ar=opt/wasi-sdk/bin/ar
+            --ranlib=opt/wasi-sdk/bin/ranlib
+            --cc=opt/wasi-sdk/bin/clang
+            --cxx=opt/wasi-sdk/bin/clang++
+            --objcc=opt/wasi-sdk/bin/clang
+            --dep-cc=opt/wasi-sdk/bin/clang
+
+            --prefix=../release
+
+          )
+
           ./configure  \
-          --prefix=../release \
-          
+          ${FFMPEG_CONFIG_FLAGS_BASE[@]} \
           | tee ../release/configure.log
   
       - name: Build
         working-directory: FFmpeg
         run: |
-          make -j32 && make install
-          rm -r ../release/share
+          make -n |
+            # Add cflags that ./configure does not accept
+            sed 's/clang /clang -D_WASI_EMULATED_PROCESS_CLOCKS -lwasi-emulated-process-clocks /g' |
+            sed 's/clang /clang -D_WASI_EMULATED_SIGNAL -lwasi-emulated-signal /g' |
+            sed 's/clang /clang -msimd128 /g' |
+            cat > ../build/compile.sh
+          chmod +x ../build/compile.sh
+          sed -i 's,tempnam,NULL; //tempnam,g' ./libavutil/file_open.c
+          ../build/compile.sh
+          ls release
       
       - name: Create Archive
         uses: thedoctor0/zip-release@0.7.1
