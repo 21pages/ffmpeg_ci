@@ -17,186 +17,16 @@ permissions:
   contents: write
 
 jobs:
-
-  build-for-windows:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { target: x86_64-pc-windows-msvc, os: windows-2019, arch: x86_64, msystem: "mingw64", msvc_arch: amd64, mfx_dir: win_x64, extra: "" }
-          - { target: i686-pc-windows-msvc, os: windows-2019, arch: i686, msystem: "mingw32", msvc_arch: amd64_x86, mfx_dir: win_Win32, extra: "--enable-cross-compile" }
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-
-    - uses: actions/checkout@v2
-    - uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: ${{ matrix.job.msvc_arch }}
-
-    - name: Msys2
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: ${{ matrix.job.msystem }}
-        path-type: inherit
-        update: true
-        install: >-
-          git
-          base-devel
-          diffutils
-          make
-          cmake
-          pkg-config
-          yasm
-          nasm
-
-    - name: test
-      shell: msys2 {0}
-      run: |
-        cl
-
-    - name: Source FFmpeg
-      run: |
-        git clone --depth=1 -b ${{ env.FFMPEG_VERSION_WIN_LINUX }} https://github.com/FFmpeg/FFmpeg.git
-        mkdir includes
-        mkdir release
-        mkdir libs
-        ls -al
-
-    - name: Patch
-      run: |
-        cd FFmpeg
-        git apply -v --ignore-whitespace ../patches/5.1/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
-        git apply -v --ignore-whitespace ../patches/5.1/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
-        git apply -v --ignore-whitespace ../patches/5.1/0003-use-release-7.0-s-qsvenc-update_bitrate.patch
-        git apply -v --ignore-whitespace ../patches/5.1/0004-amf-colorspace.patch
-        cd -
-
-    - name: Source nv-codec-headers
-      run: |
-        git clone --depth=1 -b n11.1.5.2 https://github.com/FFmpeg/nv-codec-headers.git
-        cd nv-codec-headers
-        make && make install
-        cd -
-    
-    - name: Source AMF
-      run: |
-        git clone --depth=1 -b v1.4.29 https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git
-        cp -r ./AMF/amf/public/include includes/AMF
-        ls -al includes
-
-    - name: mfx dispatcher
-      shell: bash
-      run: |
-        git clone --depth=1  https://github.com/21pages/externals.git
-        cd externals/MediaSDK_22.5.4/api/mfx_dispatch/windows
-        MSBuild.exe libmfx_vs2015.vcxproj -p:Configuration=Release
-        cd -
-
-    - name: mfx dispatcher install
-      run: |
-        mkdir -p /usr/local/lib/mfx/lib
-        mkdir -p /usr/local/lib/mfx/include/mfx
-        cp externals/MediaSDK_22.5.4/api/mfx_dispatch/windows/../../../../build/${{ matrix.job.mfx_dir }}/Release/lib/libmfx_vs2015.lib /usr/local/lib/mfx/lib/mfx.lib
-        cp externals/MediaSDK_22.5.4/api/include/* /usr/local/lib/mfx/include/mfx/
-        cp externals/MediaSDK_22.5.4/api/mediasdk_structures/* /usr/local/lib/mfx/include/mfx/
-        cat > /usr/local/lib/pkgconfig/libmfx.pc << EOF
-        prefix=/usr/local/lib/mfx
-
-        # libmfx pkg-config.
-        exec_prefix=\${prefix}
-        includedir=\${prefix}/include
-        libdir=\${exec_prefix}/lib
-
-        Name: libmfx
-        Description: Intel Media SDK Dispatched static library
-        Version: 1.35.1
-        Libs: -L"\${libdir}" -lmfx -lole32 -lAdvapi32
-        Requires: 
-        Cflags: -I"\${includedir}"
-        EOF
-
-        cat /usr/local/lib/pkgconfig/libmfx.pc
-        ls -al /usr/local/lib/mfx/lib
-        ls -al /usr/local/lib/mfx/include
-    
-    - name: Configure
-      working-directory: ${{github.workspace}}/FFmpeg
-      shell: msys2 {0}
-      run: |
-        export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
-        PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH \
-        CC=cl.exe \
-        ./configure  \
-        --arch=${{ matrix.job.arch }} \
-        ${{ matrix.job.extra }} \
-        --toolchain=msvc \
-        --prefix=../release \
-        ${{env.COMMON_CONF}} \
-        --extra-cflags="-I../includes" \
-        --extra-ldflags="-libpath:$PWD/../libs" \
-        --enable-gpl \
-        --enable-d3d11va \
-        --enable-cuda \
-        --enable-ffnvcodec \
-        --enable-hwaccel=h264_nvdec \
-        --enable-hwaccel=hevc_nvdec \
-        --enable-hwaccel=h264_d3d11va \
-        --enable-hwaccel=hevc_d3d11va \
-        --enable-hwaccel=h264_d3d11va2 \
-        --enable-hwaccel=hevc_d3d11va2 \
-        --enable-amf \
-        --enable-encoder=h264_amf \
-        --enable-encoder=hevc_amf \
-        --enable-encoder=h264_nvenc \
-        --enable-encoder=hevc_nvenc \
-        --enable-libmfx --enable-encoder=h264_qsv --enable-encoder=hevc_qsv \
-        | tee ../release/configure.log
-    
-    - name: Build
-      working-directory: FFmpeg
-      shell: msys2 {0}
-      run: |
-        make -j32 && make install
-        cp /usr/local/lib/mfx/lib/mfx.lib ../release/lib/
-        rm -r ../release/share
-    
-    - name: Create Archive
-      uses: thedoctor0/zip-release@0.7.1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        type: 'zip'
-        filename: './ffmpeg_windows_${{ matrix.job.arch }}.zip'
-        path: 'release'
-    
-    - name: Publish
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        prerelease: true
-        tag_name: ${{ env.TAG_NAME }}
-        files: | 
-          ./ffmpeg_windows_${{ matrix.job.arch }}.zip
-
-  build-for-linux:
+  build-for-wasm:
     if: true
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     container:
-      # image: nvidia/cuda:11.0.3-base-ubuntu18.04
-      image: ubuntu:18.04
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04, arch: x86_64, codec: "--enable-cuda --enable-cuda_llvm --enable-ffnvcodec --enable-encoder=h264_nvenc --enable-encoder=hevc_nvenc --enable-hwaccel=h264_nvdec --enable-hwaccel=hevc_nvdec --enable-amf  --enable-encoder=h264_amf --enable-encoder=hevc_amf --enable-hwaccel=h264_vaapi --enable-hwaccel=hevc_vaapi --enable-encoder=h264_vaapi --enable-encoder=hevc_vaapi", extra: ""}
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-20.04, arch: aarch64, codec: "", extra: "--enable-cross-compile --arch=arm64 cross-prefix=aarch64-linux-gnu-" }
-          - { target: armv7-unknown-linux-gnueabihf, os: ubuntu-latest, arch: armv7, codec: "", extra: "--enable-cross-compile --arch=armhf cross-prefix=arm-linux-gnueabihf-"}
-      
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04, arch: x86_64}      
     steps:
   
       - uses: actions/checkout@v2
@@ -204,70 +34,37 @@ jobs:
       - name: tools
         run: |
           apt-get -y update
-          apt-get -y install build-essential yasm pkg-config libva-dev git zip
+          apt-get -y install build-essential yasm pkg-config git zip
       
-      - name: cross tool aarch64
-        if: ${{ matrix.job.arch == 'aarch64' }}
+      - name: wasm sdk
         run: |
-          apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-      
-      - name: cross tool armv7
-        if: ${{ matrix.job.arch == 'armv7' }}
-        run: |
-          apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-
-      - name: cuda-toolkit
-        if: ${{ matrix.job.arch == 'x86_64' }}
-        run: |
-          apt-get install -y clang llvm-dev nvidia-cuda-toolkit
-
-      # - name: cuda-toolkit # sudo apt install nvidia-cuda-toolkit
-      #   if: ${{ matrix.job.arch == 'x86_64' }}
-      #   uses: Jimver/cuda-toolkit@v0.2.6
+          wget https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz
+          tar -xvf wasi-sdk-24.0-x86_64-linux.tar.gz
+          rm wasi-sdk-24.0-x86_64-linux.tar.gz
+          mv wasi-sdk-24.0 /opt/wasi-sdk
   
+      - name: binaryen
+        run: |
+          wget https://github.com/WebAssembly/binaryen/releases/download/version_118/binaryen-version_118-x86_64-linux.tar.gz
+          tar -xvf binaryen-version_118-x86_64-linux.tar.gz
+          rm binaryen-version_118-x86_64-linux.tar.gz
+          mv binaryen-version_118 /opt/binaryen
+      
       - name: Source FFmpeg
         run: |
-          git clone --depth=1 -b ${{ env.FFMPEG_VERSION_WIN_LINUX }} https://github.com/FFmpeg/FFmpeg.git
+          git clone --depth=1 -b n7.0.2 https://github.com/FFmpeg/FFmpeg.git
           mkdir includes
           mkdir libs
           mkdir release
           ls -al
-
-      - name: Patch
-        if: ${{ matrix.job.arch == 'x86_64' }}
-        run: |
-          cd FFmpeg
-          git apply -v --ignore-whitespace ../patches/5.1/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
-          git apply -v --ignore-whitespace ../patches/5.1/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
-          git apply -v --ignore-whitespace ../patches/5.1/0003-use-release-7.0-s-qsvenc-update_bitrate.patch
-          git apply -v --ignore-whitespace ../patches/5.1/0004-amf-colorspace.patch
-          cd -
-  
-      - name: Source AMF
-        if: ${{ matrix.job.arch == 'x86_64' }}
-        run: |
-          git clone --depth=1 -b v1.4.29 https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git
-          cp -r ./AMF/amf/public/include includes/AMF
-          ls -al includes
-
-      - name: Source nv-codec-headers
-        if: ${{ matrix.job.arch == 'x86_64' }}
-        run: |
-          git clone --depth=1 -b n11.1.5.2 https://github.com/FFmpeg/nv-codec-headers.git
-          cd nv-codec-headers && make install
-          cd -
-      
+        
       - name: Configure
         working-directory: ${{github.workspace}}/FFmpeg
         run: |
+          set -euox pipefail
           ./configure  \
           --prefix=../release \
-          ${{env.COMMON_CONF}} \
-          --target-os=linux \
-          ${{ matrix.job.extra }} \
-          --extra-cflags="-I../includes" \
-          --extra-ldflags="-L$PWD/../libs" \
-          ${{ matrix.job.codec }} \
+          
           | tee ../release/configure.log
   
       - name: Build
@@ -294,257 +91,4 @@ jobs:
           files: | 
             ./ffmpeg_linux_${{ matrix.job.arch }}.zip
   
-  build-for-macos:
-    if: true
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          # macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
-          - { target: x86_64-apple-darwin, os: macos-13, arch: x86_64 }
-          - { target: aarch64-apple-darwin, os: macos-latest, arch: aarch64 }
-      
-    steps:
-  
-      - uses: actions/checkout@v2
-  
-      - name: tools
-        run: |
-          brew install yasm pkg-config
-  
-      - name: Source FFmpeg
-        run: |
-          git clone --depth=1 -b ${{ env.FFMPEG_VERSION }} https://github.com/FFmpeg/FFmpeg.git
-          mkdir includes
-          mkdir release
-          mkdir libs
-          ls -al
-      
-      - name: Configure
-        working-directory: ${{github.workspace}}/FFmpeg
-        run: |
-          ./configure  \
-          cc=clang \
-          --disable-hwaccels \
-          --disable-encoders \
-          --disable-videotoolbox \
-          --disable-autodetect \
-          --prefix=../release \
-          ${{env.COMMON_CONF}} \
-          --enable-videotoolbox \
-          --enable-encoder=h264_videotoolbox,hevc_videotoolbox \
-          --enable-hwaccel=h264_videotoolbox,hevc_videotoolbox \
-          | tee ../release/configure.log
-  
-      - name: Build
-        working-directory: FFmpeg
-        run: |
-          make -j32 && make install
-          rm -r ../release/share
-      
-      - name: Create Archive
-        uses: thedoctor0/zip-release@0.7.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          type: 'zip'
-          filename: 'ffmpeg_macos_${{ matrix.job.arch }}.zip'
-          path: 'release'
-      
-      - name: Publish
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: | 
-            ./ffmpeg_macos_${{ matrix.job.arch }}.zip
-
-  build-for-android:
-    if: true
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { target: aarch64-linux-android, os: ubuntu-20.04, arch: aarch64, ndk_toolchain_path: aarch64-linux-android, cpu: "armv8-a"}
-          - { target: armv7-linux-androideabi, os: ubuntu-20.04, arch: armv7, ndk_toolchain_path: armv7a-linux-androideabi, cpu: "armv7-a"}
-    steps:
-  
-      - uses: actions/checkout@v2
-  
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-               clang \
-               cmake \
-               curl \
-               gcc-multilib \
-               git \
-               g++ \
-               g++-multilib \
-               libappindicator3-dev \
-               libasound2-dev \
-               libc6-dev \
-               libclang-10-dev \
-               libclang-dev \
-               libgstreamer1.0-dev \
-               libgstreamer-plugins-base1.0-dev \
-               libgtk-3-dev \
-               libpam0g-dev \
-               libpulse-dev \
-               libva-dev \
-               libvdpau-dev \
-               libxcb-randr0-dev \
-               libxcb-shape0-dev \
-               libxcb-xfixes0-dev \
-               libxdo-dev \
-               libxfixes-dev \
-               llvm-10-dev \
-               llvm-dev \
-               nasm \
-               ninja-build \
-               openjdk-11-jdk-headless \
-               pkg-config \
-               tree \
-               wget
-
-      
-      - uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: ${{ env.NDK_VERSION }}
-          add-to-path: true
-
-      - name: Source FFmpeg
-        run: |
-          git clone --depth=1 -b ${{ env.FFMPEG_VERSION }} https://github.com/FFmpeg/FFmpeg.git
-          mkdir includes
-          mkdir libs
-          mkdir release
-          ls -al
-          uname -a
-      
-      - name: Configure
-        working-directory: ${{github.workspace}}/FFmpeg
-        # continue-on-error: true
-        run: |
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK" >> $GITHUB_ENV
-          export HOST_TAG="linux-x86_64" # current platform, set as `ls $ANDROID_NDK/toolchains/llvm/prebuilt/`
-          export TOOLCHAIN=$ANDROID_NDK/toolchains/llvm/prebuilt/$HOST_TAG
-          export API_LEVEL="21"
-          export CC=$TOOLCHAIN/bin/${{ matrix.job.ndk_toolchain_path }}${API_LEVEL}-clang
-          export CXX=$TOOLCHAIN/bin/${{ matrix.job.ndk_toolchain_path }}${API_LEVEL}-clang++
-          export AR=$TOOLCHAIN/bin/llvm-ar
-          export AS=$TOOLCHAIN/bin/llvm-as
-          export NM=$TOOLCHAIN/bin/llvm-nm
-          export STRIP=$TOOLCHAIN/bin/llvm-strip
-
-          ./configure  \
-          --prefix=../release \
-          ${{env.COMMON_CONF}} \
-          --disable-hwaccels \
-          --disable-encoders \
-          --host-cc=clang \
-          --cc=$CC \
-          --cxx=$CXX \
-          --sysroot=$TOOLCHAIN/sysroot \
-          --ar=$AR \
-          --nm=$NM \
-          --strip=$STRIP \
-          --enable-cross-compile \
-          --arch=${{ matrix.job.arch }} \
-          --target-os=android \
-          --disable-asm \
-          --extra-cflags="-march=${{ matrix.job.cpu }}" \
-          --enable-mediacodec \
-          --enable-jni \
-          --enable-encoder=h264_mediacodec --enable-encoder=hevc_mediacodec \
-          --enable-decoder=h264_mediacodec --enable-decoder=hevc_mediacodec \
-          | tee ../release/configure.log
-
-      - name: print ffbuild logs
-        run: '[[ -f ./FFmpeg/ffbuild/config.log ]] && tail -50 ./FFmpeg/ffbuild/config.log'
-  
-      - name: Build
-        working-directory: FFmpeg
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_NDK
-          export PATH=$PATH:$ANDROID_NDK_HOME
-          make -j32 && make install
-          rm -r ../release/share
-      
-      - name: Create Archive
-        uses: thedoctor0/zip-release@0.7.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          type: 'zip'
-          filename: 'ffmpeg_android_${{ matrix.job.arch }}.zip'
-          path: 'release'
-      
-      - name: Publish
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: | 
-            ./ffmpeg_android_${{ matrix.job.arch }}.zip            
-  
-  build-for-ios:
-    if: true
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { target: aarch64-apple-ios, os: macos-latest, arch: aarch64 }
-      
-    steps:
-  
-      - uses: actions/checkout@v2
-  
-      - name: tools
-        run: |
-          brew install yasm pkg-config wget
-  
-      - name: Source FFmpeg
-        run: |
-          git clone --depth=1 -b ${{ env.FFMPEG_VERSION }} https://github.com/FFmpeg/FFmpeg.git
-          mkdir includes
-          mkdir libs
-          ls -al
-          uname -a
-
-      - name: Build
-        run: |
-          mv ./scripts/build-ffmpeg-ios.sh ./
-          mkdir -p thin/arm64
-          export COMMON_CONF="${{env.COMMON_CONF}}"
-          ./build-ffmpeg-ios.sh
-          rm -r thin/arm64/share
-      
-      - name: Create Archive
-        uses: thedoctor0/zip-release@0.7.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          type: 'zip'
-          filename: 'ffmpeg_ios_${{ matrix.job.arch }}.zip'
-          path: 'thin/arm64'
-      
-      - name: Publish
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: | 
-            ./ffmpeg_ios_${{ matrix.job.arch }}.zip
-
+ 
