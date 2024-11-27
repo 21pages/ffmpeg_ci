@@ -32,7 +32,7 @@ jobs:
         shell: msys2 {0}
     steps:
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: ${{ matrix.job.msvc_arch }}
@@ -199,7 +199,7 @@ jobs:
       
     steps:
   
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
   
       - name: tools
         run: |
@@ -227,21 +227,21 @@ jobs:
   
       - name: Source FFmpeg
         run: |
-          git clone --depth=1 -b ${{ env.FFMPEG_VERSION_WIN_LINUX }} https://github.com/FFmpeg/FFmpeg.git
+          git clone --depth=1 -b n7.1-patch https://github.com/21pages/FFmpeg.git
           mkdir includes
           mkdir libs
           mkdir release
           ls -al
 
-      - name: Patch
-        if: ${{ matrix.job.arch == 'x86_64' }}
-        run: |
-          cd FFmpeg
-          git apply -v --ignore-whitespace ../patches/5.1/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
-          git apply -v --ignore-whitespace ../patches/5.1/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
-          git apply -v --ignore-whitespace ../patches/5.1/0003-use-release-7.0-s-qsvenc-update_bitrate.patch
-          git apply -v --ignore-whitespace ../patches/5.1/0004-amf-colorspace.patch
-          cd -
+      # - name: Patch
+      #   if: ${{ matrix.job.arch == 'x86_64' }}
+      #   run: |
+      #     cd FFmpeg
+      #     git apply -v --ignore-whitespace ../patches/5.1/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
+      #     git apply -v --ignore-whitespace ../patches/5.1/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
+      #     git apply -v --ignore-whitespace ../patches/5.1/0003-use-release-7.0-s-qsvenc-update_bitrate.patch
+      #     git apply -v --ignore-whitespace ../patches/5.1/0004-amf-colorspace.patch
+      #     cd -
   
       - name: Source AMF
         if: ${{ matrix.job.arch == 'x86_64' }}
@@ -308,7 +308,7 @@ jobs:
       
     steps:
   
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
   
       - name: tools
         run: |
@@ -374,7 +374,7 @@ jobs:
           - { target: armv7-linux-androideabi, os: ubuntu-20.04, arch: armv7, ndk_toolchain_path: armv7a-linux-androideabi, cpu: "armv7-a"}
     steps:
   
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
   
       - name: Install dependencies
         run: |
@@ -422,7 +422,7 @@ jobs:
 
       - name: Source FFmpeg
         run: |
-          git clone --depth=1 -b ${{ env.FFMPEG_VERSION }} https://github.com/FFmpeg/FFmpeg.git
+          git clone --depth=1 -b idr https://github.com/21pages/FFmpeg.git
           mkdir includes
           mkdir libs
           mkdir release
@@ -508,7 +508,7 @@ jobs:
       
     steps:
   
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
   
       - name: tools
         run: |
